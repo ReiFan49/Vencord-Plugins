@@ -13,3 +13,4 @@ Documentation that contains the generated list of available plugins may be avail
 
     1. with `git clone`, use `git clone -b <pluginBranch> https://github.com/ReiFan49/Vencord-Plugins <importPath>` to import.
     2. with `git submodule`, use `git submodule add -b <pluginBranch> https://github.com/ReiFan49/Vencord-Plugins <importPath>` to import.
+    3. **Do not use `git worktree`, unless it's for local development of the plugin. Which is not important for anyone aside the maintainer themselves!**
