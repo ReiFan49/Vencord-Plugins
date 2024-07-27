@@ -104,7 +104,9 @@ jobs:
       working-directory: ./base
       run: |
         pnpm exec eslint src/userplugins --ext .js,.jsx,.ts,.tsx --rule 'simple-header/header: warn' --rule 'indent: [error, 2]' --rule 'quotes: [warn, single]' --rule 'simple-import-sort/imports: off' --rule 'no-duplicate-imports: warn' --rule 'object-curly-spacing: off'
-        pnpm exec stylelint "src/userplugins/**/*.css"
+        if compgen -G "src/userplugins/**/*.css" > /dev/null; then
+          pnpm exec stylelint "src/userplugins/**/*.css"
+        fi
 
     ### Build Phase ###
     - name: Build Patch
