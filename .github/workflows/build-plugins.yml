@@ -107,21 +107,24 @@ jobs:
         if compgen -G "src/userplugins/**/*.css" > /dev/null; then
           pnpm exec stylelint "src/userplugins/**/*.css"
         fi
+    - name: Lint Combined
+      working-directory: ./base
+      run: pnpm testTsc
 
     ### Build Phase ###
     - name: Build Patch
       if: matrix.build-type == 'Patch'
       working-directory: ./base
-      run: pnpm build && pnpm testTsc
+      run: pnpm build
     - name: Build Extension
       if: matrix.build-type == 'Extension'
       working-directory: ./base
-      run: pnpm buildWeb && pnpm testTsc
+      run: pnpm buildWeb
     - name: Build Standalone
       if: matrix.build-type == 'Standalone'
       working-directory: ./base
-      run: pnpm buildStandalone && pnpm testTsc
+      run: pnpm buildStandalone
     - name: Build Standalone Extension
       if: matrix.build-type == 'ExtensionStandalone'
       working-directory: ./base
-      run: pnpm buildWebStandalone && pnpm testTsc
+      run: pnpm buildWebStandalone
