@@ -77,10 +77,10 @@ export default definePlugin({
   emojiRedactFromContent(message: Message) {
     const toRemove = [];
     blacklistNames().forEach(name => {
-      toRemove.push(new RegExp(`<a?\:\\\w*${name}\\\w*\:(?:\\\d+)>`, 'ig'));
+      toRemove.push(new RegExp(`<a?[:]\\w*${name}\\w*[:](?:\\d+)>`, 'ig'));
     });
     blacklistIDs().forEach(emojiID => {
-      toRemove.push(new RegExp(`<a?\:(?:\\\w+)\:${emojiID}>`, 'ig'));
+      toRemove.push(new RegExp(`<a?[:](?:\\w+)[:]${emojiID}>`, 'ig'));
     });
     toRemove.forEach(expr => {
       message.content = message.content.replace(expr, '');
