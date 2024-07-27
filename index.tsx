@@ -24,19 +24,19 @@ const settings = definePluginSettings({
   },
 });
 
-function emojiName(s) {
+function emojiName(s : string) : string {
   return (s[0] === '~') ? reverseString(s.slice(1)) : s;
 }
-function reverseString(s) {
+function reverseString(s : string) : string {
   return Array.from(String(s)).reverse().join('');
 }
 
-function blacklistNames() {
+function blacklistNames() : string[] {
   return settings.store.emojiNames.split(/\s+/)
     .map(name => emojiName(name))
     .filter(name => /^[A-Za-z0-9_]{2,}/.test(name));
 }
-function blacklistIDs() {
+function blacklistIDs() : string[] {
   return settings.store.emojiIDs.split(/\s+/)
     .filter(id => /^[1-9][0-9]+/.test(id));
 }
@@ -75,7 +75,7 @@ export default definePlugin({
     })),
   ],
   emojiRedactFromContent(message: Message) {
-    const toRemove = [];
+    const toRemove : RegExp[] = [];
     blacklistNames().forEach(name => {
       toRemove.push(new RegExp(`<a?[:]\\w*${name}\\w*[:](?:\\d+)>`, 'ig'));
     });
@@ -92,7 +92,7 @@ export default definePlugin({
       message.reactions,
       message.reactions.splice(0).filter(
         reaction => {
-          if (reaction.emoji.id === null) return true;
+          if (reaction?.emoji.id === null) return true;
           if (blacklistNames().some(name => reaction.emoji.name.indexOf(name) + 1)) return false;
           if (blacklistIDs().indexOf(reaction.emoji.id) + 1) return false;
           return true;
