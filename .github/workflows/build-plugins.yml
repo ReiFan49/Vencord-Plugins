@@ -1,0 +1,125 @@
+name: Build Plugins
+on:
+  workflow_dispatch:
+  push:
+    branches:
+    - master
+    - plugin/*
+
+env:
+  VENCORD_REPOSITORY_BASE: Vendicated/Vencord
+
+jobs:
+  env-build:
+    runs-on: ubuntu-latest
+    outputs:
+      vencord_repository:      ${{ steps.prep.outputs.repository }}
+      vencord_gitconfig_alias: ${{ steps.prep.outputs.gitconfig_alias }}
+    name: Prepare Environment
+    steps:
+    - id: prep
+      name: Prepare
+      run: |
+        selvar() {
+          if [[ -n $1 ]]; then
+            echo "$1"
+          elif [[ -n $2 ]]; then
+            echo "$2"
+          elif [[ -n $3 ]]; then
+            echo "$3"
+          else
+            echo "$4"
+          fi
+        }
+        echo "repository="$(selvar "${{secrets.VENCORD_REPOSITORY}}" "${{vars.VENCORD_REPOSITORY}}" "${VENCORD_REPOSITORY}" "${VENCORD_REPOSITORY_BASE}" | sed -e 's|https://github.com//||g') >> "${GITHUB_OUTPUT}"
+        echo "gitconfig_alias="$(selvar "${{secrets.VENCORD_GITCONFIG_ALIAS}}" "${{vars.VENCORD_GITCONFIG_ALIAS}}" "" "") >> "${GITHUB_OUTPUT}"
+
+  build:
+    needs:
+    - env-build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build-type: [ Patch, Extension, Standalone, ExtensionStandalone ]
+    env:
+      VENCORD_REPOSITORY:      ${{ needs.env-build.outputs.vencord_repository }}
+      VENCORD_GITCONFIG_ALIAS: ${{ needs.env-build.outputs.vencord_gitconfig_alias }}
+    if: needs.env-build.outputs.vencord_repository != ''
+    name: Build Plugins with ${{ matrix.build-type }} mode
+    steps:
+    ### Initialize Repositories ###
+    - name: Checkout Plugins
+      uses: actions/checkout@v4
+      with:
+        path: plugins
+        fetch-depth: 0
+    - name: Checkout Core
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ env.VENCORD_REPOSITORY }}
+        path: base
+        fetch-depth: 0
+    - name: Apply Gitconfig
+      if: ${{ (env.VENCORD_GITCONFIG_ALIAS != '') && (env.VENCORD_REPOSITORY != env.VENCORD_REPOSITORY_BASE) }}
+      run: |
+        UNIQUE_ID=$(date +%s%N)
+        CONFIG_NAME="/tmp/Vencord_${UNIQUE_ID}.gitconfig"
+        curl -Lo "${CONFIG_NAME}" "${VENCORD_GITCONFIG_ALIAS}"
+        git -C base config --add include.path "${CONFIG_NAME}"
+    - name: Patch Base Repo
+      if: ${{ (env.VENCORD_GITCONFIG_ALIAS != '') && (env.VENCORD_REPOSITORY != env.VENCORD_REPOSITORY_BASE) }}
+      run: |
+        git -C base remote add up 'https://github.com/${{ env.VENCORD_REPOSITORY_BASE }}'
+        git -C base sync-master
+
+    ### Initialize Node ###
+    - name: Setup PNPM
+      uses: pnpm/action-setup@v4
+      with:
+        version: latest
+        run_install: false
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: lts/*
+        cache: 'pnpm'
+        cache-dependency-path: 'base/pnpm-lock.yaml'
+    - name: Install dependencies
+      working-directory: ./base
+      run:  pnpm install --frozen-lockfile
+
+    ### Plugins Linking ###
+    - name: Link Plugins
+      run: |
+        PLUGINS_FOLDER=$PWD/base/src/userplugins
+        mkdir -p ${PLUGINS_FOLDER}
+        for pluginBranch in $(git -C plugins branch --no-column --format '%(refname:short)' --list plugin/*); do
+          pluginFolder=$(echo $pluginBranch | sed -re 's|[-_](\w)|\U\1|g')
+          git -C plugins worktree add "${PLUGINS_FOLDER}/${pluginFolder}" $pluginBranch
+        done
+
+    ### Test Phase ###
+    - name: Lint Plugins
+      working-directory: ./base
+      run: |
+        pnpm exec eslint src/userplugins --ext .js,.jsx,.ts,.tsx
+        pnpm exec stylelint "src/userplugins/**/*.css"
+
+    ### Build Phase ###
+    - name: Build Patch
+      if: matrix.build-type == 'Patch'
+      working-directory: ./base
+      run: pnpm build && pnpm testTsc
+    - name: Build Extension
+      if: matrix.build-type == 'Extension'
+      working-directory: ./base
+      run: pnpm buildWeb && pnpm testTsc
+    - name: Build Standalone
+      if: matrix.build-type == 'Standalone'
+      working-directory: ./base
+      run: pnpm buildStandalone && pnpm testTsc
+    - name: Build Standalone Extension
+      if: matrix.build-type == 'ExtensionStandalone'
+      working-directory: ./base
+      run: pnpm buildWebStandalone && pnpm testTsc
