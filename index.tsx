@@ -88,13 +88,12 @@ export default definePlugin({
   },
   emojiRedactFromReaction(message: Message) {
     if (!message.reactions?.length) return;
-    [].push.apply(
-      message.reactions,
-      message.reactions.splice(0).filter(
+    message.reactions.push(
+      ...message.reactions.splice(0).filter(
         reaction => {
           if (reaction?.emoji.id === null) return true;
           if (blacklistNames().some(name => reaction.emoji.name.indexOf(name) + 1)) return false;
-          if (blacklistIDs().indexOf(reaction.emoji.id) + 1) return false;
+          if (blacklistIDs().indexOf(String(reaction.emoji.id)) + 1) return false;
           return true;
         }
       ));
