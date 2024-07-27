@@ -3,8 +3,8 @@ on:
   workflow_dispatch:
   push:
     branches:
-    - master
-    - plugin/*
+    - 'master'
+    - 'plugin/**'
 
 env:
   VENCORD_REPOSITORY_BASE: Vendicated/Vencord
@@ -94,8 +94,8 @@ jobs:
       run: |
         PLUGINS_FOLDER=$PWD/base/src/userplugins
         mkdir -p ${PLUGINS_FOLDER}
-        for pluginBranch in $(git -C plugins branch --no-column --format '%(refname:short)' --list plugin/*); do
-          pluginFolder=$(echo $pluginBranch | sed -re 's|[-_](\w)|\U\1|g')
+        for pluginBranch in $(git -C plugins branch -r --no-column --format '%(refname:short)' --list */plugin/*); do
+          pluginFolder=$(basename $(echo $pluginBranch | sed -re 's|[-_](\w)|\U\1|g'))
           git -C plugins worktree add "${PLUGINS_FOLDER}/${pluginFolder}" $pluginBranch
         done
 
@@ -103,7 +103,7 @@ jobs:
     - name: Lint Plugins
       working-directory: ./base
       run: |
-        pnpm exec eslint src/userplugins --ext .js,.jsx,.ts,.tsx
+        pnpm exec eslint src/userplugins --ext .js,.jsx,.ts,.tsx --rule 'simple-header/header: warn' --rule 'indent: [error, 2]' --rule 'quotes: [warn, single]' --rule 'simple-import-sort/imports: off' --rule 'no-duplicate-imports: warn' --rule 'object-curly-spacing: off'
         pnpm exec stylelint "src/userplugins/**/*.css"
 
     ### Build Phase ###
