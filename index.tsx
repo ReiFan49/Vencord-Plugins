@@ -6,10 +6,10 @@
 
 import { Message } from "discord-types/general";
 
-import { Logger } from "@utils/Logger";
 import { definePluginSettings } from "@api/Settings";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
-import { Forms } from "@webpack/common";
+import { Forms, FluxDispatcher } from "@webpack/common";
 
 const settings = definePluginSettings({
   emojiNames: {
@@ -130,14 +130,16 @@ export default definePlugin({
       <Forms.FormText>
         Each field supports a space-separated entries. <br /><br />
 
-        Emoji Names are case-insensitive and treated as any-side wildcard.
+        Emoji Names are case-insensitive and treated as any-side wildcard. <br />
         Prefixing Emoji Name with a tilde "~" reverses the given entry.
-        Mainly used to avoid detection or high sterilization environment.
+        Mainly used to avoid detection or high sterilization environment. <br /><br />
+
+        <em>Emojis filtered will not be fully restored <strong>without restarting</strong> the client.</em>
       </Forms.FormText>
     </>
   ),
   settings,
-  patches: [
+  /* patches: [
     ...[
       '="MessageStore",',
       '="ThreadMessageStore",',
@@ -146,43 +148,77 @@ export default definePlugin({
       find,
       replacement: [{
         match: /(?<=(?:MESSAGE_CREATE|MESSAGE_UPDATE):function\((\i)\){)/,
-        replace: (_, event) => `$self.emojiRedactFromMessage(${event}.message);`,
+        replace: (_, event) => `$self.onMessageFilterOne(${event}.message);`,
       },{
         match: /(?<=LOAD_MESSAGES_SUCCESS:function\((\i)\){)/,
         replace: (_, event) => `${event}.messages.forEach(msg=>$self.emojiRedactFromMessage(msg));`,
       }],
     })),
-  ],
-  emojiRedactFromContent(message: Message) {
-    const toRemove : RegExp[] = [];
-    blacklistNames().forEach(name => {
-      toRemove.push(new RegExp(`<a?[:]\\w*${name}\\w*[:](?:\\d+)>`, 'ig'));
-    });
-    blacklistIDs().forEach(emojiID => {
-      toRemove.push(new RegExp(`<a?[:](?:\\w+)[:]${emojiID}>`, 'ig'));
-    });
-    toRemove.forEach(expr => {
-      message.content = message.content.replace(expr, '');
-    });
+  ], */
+
+  start() {
+    FluxDispatcher.subscribe('MESSAGE_CREATE', this.onMessageFilterOne);
+    FluxDispatcher.subscribe('MESSAGE_UPDATE', this.onMessageFilterOne);
+    FluxDispatcher.subscribe('LOAD_MESSAGES_SUCCESS', this.onMessageFilterMany);
+
+    // subscribePriority('MESSAGE_REACTION_ADD', this.onReactionFilterOne);
+    interceptor(['MESSAGE_REACTION_ADD'], this.interceptReactionOne);
+    subscribePriority('MESSAGE_REACTION_ADD_MANY', this.onReactionFilterMany);
   },
-  emojiRedactFromReaction(message: Message) {
-    if (!message.reactions?.length) return;
-    message.reactions.push(
-      ...message.reactions.splice(0).filter(
-        reaction => {
-          if (reaction?.emoji.id === null) return true;
-          if (blacklistNames().some(name => reaction.emoji.name.indexOf(name) + 1)) return false;
-          if (blacklistIDs().indexOf(String(reaction.emoji.id)) + 1) return false;
-          return true;
-        }
-      ));
+  stop() {
+    FluxDispatcher.unsubscribe('MESSAGE_CREATE', this.onMessageFilterOne);
+    FluxDispatcher.unsubscribe('MESSAGE_UPDATE', this.onMessageFilterOne);
+    FluxDispatcher.unsubscribe('LOAD_MESSAGES_SUCCESS', this.onMessageFilterMany);
+
+    // FluxDispatcher.unsubscribe('MESSAGE_REACTION_ADD', this.onReactionFilterOne);
+    removeInterceptor(['MESSAGE_REACTION_ADD'], this.interceptReactionOne);
+    FluxDispatcher.unsubscribe('MESSAGE_REACTION_ADD_MANY', this.onReactionFilterMany);
   },
-  emojiRedactFromMessage(message: Message) {
+
+  onMessageFilterOne(event) {
+    if (!!event.__filterUnwantedEmoji_MessageFilterOne) return;
+
+    event.__filterUnwantedEmoji_MessageFilterOne = true;
+    _redactEmojiFromMessageData(event.message);
+    FluxDispatcher.dispatch(event);
+  },
+  onMessageFilterMany(event) {
+    if (!!event.__filterUnwantedEmoji_MessageFilterMany) return;
+
+    event.__filterUnwantedEmoji_MessageFilterMany = true;
+    event.messages.forEach(msg => _redactEmojiFromMessageData(msg));
+    FluxDispatcher.dispatch(event);
+  },
+  onReactionFilterOne(event) {
+    if (_isEmojiGood(event.emoji)) return;
+    Object.assign(event, {emoji: {id: null, name: '�'}});
+  },
+  onReactionFilterMany(event) {
+    filterArray(event.reactions, reaction => _isEmojiGood(reaction.emoji));
+  },
+  // cancel MESSAGE_REACTION_ADD event if blacklisted emoji
+  interceptTest(event) {
+    if (!(['MESSAGE_REACTION_ADD'].indexOf(event.type) + 1)) return false;
+    console.log(event);
+    return false;
+  },
+  interceptReactionOne(event) {
+    if (!(['MESSAGE_REACTION_ADD'].indexOf(event.type) + 1)) return false;
     try {
-      this.emojiRedactFromContent(message);
-      this.emojiRedactFromReaction(message);
+      if (_isEmojiGood(event.emoji)) return false;
     } catch (e) {
-      new Logger("FilterUnwantedEmoji").error("Unable to cleanup unwanted emojis.", e);
+      new Logger("FilterUnwantedEmoji").error("Unable to halt emoji reaction.", e);
+      return false;
     }
+    return true;
+  },
+  // cancel MESSAGE_REACTION_ADD_MANY event if all emojis wiped out
+  interceptReactionMany(event) {
+    if (!(['MESSAGE_REACTION_ADD_MANY'].indexOf(event.type) + 1)) return false;
+    event.reactions.push(
+      ...event.reactions.splice(0).filter(reaction => _isEmojiGood(reaction))
+    );
+    if (event.reactions.size) return false;
+    return true;
   },
 });
