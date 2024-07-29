@@ -121,7 +121,7 @@ function _redactEmojiFromMessageData(message: Message) {
     _redactEmojiFromContent(message);
     _redactEmojiFromReactions(message);
   } catch (e) {
-    new Logger("FilterUnwantedEmoji").error("Unable to cleanup unwanted emojis.", e);
+    new Logger('FilterUnwantedEmoji').error('Unable to cleanup unwanted emojis.', e);
   }
 }
 
@@ -204,17 +204,12 @@ export default definePlugin({
     filterArray(event.reactions, reaction => _isEmojiGood(reaction.emoji));
   },
   // cancel MESSAGE_REACTION_ADD event if blacklisted emoji
-  interceptTest(event) {
-    if (!(['MESSAGE_REACTION_ADD'].indexOf(event.type) + 1)) return false;
-    console.log(event);
-    return false;
-  },
   interceptReactionOne(event) {
     if (!(['MESSAGE_REACTION_ADD'].indexOf(event.type) + 1)) return false;
     try {
       if (_isEmojiGood(event.emoji)) return false;
     } catch (e) {
-      new Logger("FilterUnwantedEmoji").error("Unable to halt emoji reaction.", e);
+      new Logger('FilterUnwantedEmoji').error('Unable to halt emoji reaction.', e);
       return false;
     }
     return true;
