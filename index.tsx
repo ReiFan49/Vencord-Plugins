@@ -45,12 +45,14 @@ function filterArray(array : any[], callback: (data: any) => boolean) {
 }
 
 function interceptor(types, callback: (event: any) => boolean) {
+  if (typeof types === 'string') types = types.split(/\s+/);
+
   function wrap(event) {
     if (!(types.indexOf(event.type) + 1)) return false;
     return callback(event);
   }
 
-  interceptor.map.push([callback, wrap]);
+  interceptor.map.push([callback, types, wrap]);
   // @ts-ignore
   FluxDispatcher.addInterceptor(wrap);
 }
@@ -58,10 +60,15 @@ function interceptor(types, callback: (event: any) => boolean) {
 interceptor.map = [];
 
 function removeInterceptor(types, callback: (event: any) => boolean) {
+  if (typeof types === 'string') types = types.split(/\s+/);
+
   const pairIndex = interceptor.map.findIndex(pair => pair[0] === callback);
   if (typeof pairIndex !== 'number') return;
 
-  const wrap = interceptor.map.splice(pairIndex, 1).pop().pop();
+  const [pairFun, pairTypes, wrap] = interceptor.map.splice(pairIndex, 1).pop().pop();
+  filterArray(pairTypes, type => !(types.indexOf(type) + 1));
+  // do not remove the interceptor if it's not empty yet
+  if (pairTypes.length > 0) return;
   // @ts-ignore
   FluxDispatcher._interceptors.splice(wrap, 1);
 }
