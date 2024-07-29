@@ -24,12 +24,49 @@ const settings = definePluginSettings({
   },
 });
 
+/* utility */
+
 function emojiName(s : string) : string {
   return (s[0] === '~') ? reverseString(s.slice(1)) : s;
 }
 function reverseString(s : string) : string {
   return Array.from(String(s)).reverse().join('');
 }
+
+function subscribePriority(type, callback: (data: any) => void) {
+  const subs : Set<any> = FluxDispatcher._subscriptions[type];
+  if (!subs)
+    return FluxDispatcher.subscribe(type, callback);
+  FluxDispatcher._subscriptions[type] = new Set([callback, ...subs]);
+}
+
+function filterArray(array : any[], callback: (data: any) => boolean) {
+  array.push(...array.splice(0).filter(callback));
+}
+
+function interceptor(types, callback: (event: any) => boolean) {
+  function wrap(event) {
+    if (!(types.indexOf(event.type) + 1)) return false;
+    return callback(event);
+  }
+
+  interceptor.map.push([callback, wrap]);
+  // @ts-ignore
+  FluxDispatcher.addInterceptor(wrap);
+}
+
+interceptor.map = [];
+
+function removeInterceptor(types, callback: (event: any) => boolean) {
+  const pairIndex = interceptor.map.findIndex(pair => pair[0] === callback);
+  if (typeof pairIndex !== 'number') return;
+
+  const wrap = interceptor.map.splice(pairIndex, 1).pop().pop();
+  // @ts-ignore
+  FluxDispatcher._interceptors.splice(wrap, 1);
+}
+
+/* blacklist settings */
 
 function blacklistNames() : string[] {
   return settings.store.emojiNames.split(/\s+/)
@@ -40,6 +77,48 @@ function blacklistIDs() : string[] {
   return settings.store.emojiIDs.split(/\s+/)
     .filter(id => /^[1-9][0-9]+/.test(id));
 }
+
+/* internal functions */
+
+function _isEmojiGood(emoji) {
+  if (emoji.id === null) return true;
+  if (blacklistNames().some(name => emoji.name.indexOf(name) + 1)) return false;
+  if (blacklistIDs().indexOf(String(emoji.id)) + 1) return false;
+  return true;
+}
+
+function _redactEmojiFromContent(message: Message) {
+  const toRemove : RegExp[] = [];
+  const baseContent = message.content;
+  blacklistNames().forEach(name => {
+    toRemove.push(new RegExp(`<a?[:]\\w*${name}\\w*[:](?:\\d+)>`, 'ig'));
+  });
+  blacklistIDs().forEach(emojiID => {
+    toRemove.push(new RegExp(`<a?[:](?:\\w+)[:]${emojiID}>`, 'ig'));
+  });
+  toRemove.forEach(expr => {
+    message.content = message.content.replace(expr, '');
+  });
+  if (baseContent !== message.content) {
+    message.content = [message.content, "-# This message has been filtered."].join("\n").trim();
+  }
+}
+
+function _redactEmojiFromReactions(message: Message) {
+  if (!message.reactions?.length) return;
+  filterArray(message.reactions, reaction => _isEmojiGood(reaction.emoji));
+}
+
+function _redactEmojiFromMessageData(message: Message) {
+  try {
+    _redactEmojiFromContent(message);
+    _redactEmojiFromReactions(message);
+  } catch (e) {
+    new Logger("FilterUnwantedEmoji").error("Unable to cleanup unwanted emojis.", e);
+  }
+}
+
+/* plugin */
 
 export default definePlugin({
   name: 'FilterUnwantedEmoji',
