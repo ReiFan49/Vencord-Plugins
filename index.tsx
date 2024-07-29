@@ -24,6 +24,8 @@ const settings = definePluginSettings({
   },
 });
 
+const filteredMessage = '-# This message has been filtered.';
+
 /* utility */
 
 function emojiName(s : string) : string {
@@ -96,7 +98,9 @@ function _isEmojiGood(emoji) {
 
 function _redactEmojiFromContent(message: Message) {
   const toRemove : RegExp[] = [];
-  const baseContent = message.content;
+  // @ts-ignore
+  const baseContent = ('_filterData' in message) ? message._filterData.after : message.content;
+  message.content = baseContent;
   blacklistNames().forEach(name => {
     toRemove.push(new RegExp(`<a?[:]\\w*${name}\\w*[:](?:\\d+)>`, 'ig'));
   });
@@ -107,7 +111,15 @@ function _redactEmojiFromContent(message: Message) {
     message.content = message.content.replace(expr, '');
   });
   if (baseContent !== message.content) {
-    message.content = [message.content, "-# This message has been filtered."].join("\n").trim();
+    // @ts-ignore
+    message._filterData = {
+      original: baseContent,
+      after:    message.content.trim(),
+    };
+  }
+  if ('_filterData' in message) {
+    // @ts-ignore
+    message.content = [message._filterData.after, filteredMessage].join('\n').trim();
   }
 }
 
@@ -183,18 +195,18 @@ export default definePlugin({
   },
 
   onMessageFilterOne(event) {
-    if (!!event.__filterUnwantedEmoji_MessageFilterOne) return;
-
-    event.__filterUnwantedEmoji_MessageFilterOne = true;
+    const oldMessage = JSON.stringify(event.message);
     _redactEmojiFromMessageData(event.message);
-    FluxDispatcher.dispatch(event);
+    const newMessage = JSON.stringify(event.message);
+    if (oldMessage !== newMessage)
+      FluxDispatcher.dispatch(event);
   },
   onMessageFilterMany(event) {
-    if (!!event.__filterUnwantedEmoji_MessageFilterMany) return;
-
-    event.__filterUnwantedEmoji_MessageFilterMany = true;
+    const oldMessages = JSON.stringify(event.messages);
     event.messages.forEach(msg => _redactEmojiFromMessageData(msg));
-    FluxDispatcher.dispatch(event);
+    const newMessages = JSON.stringify(event.messages);
+    if (oldMessages !== newMessages)
+      FluxDispatcher.dispatch(event);
   },
   onReactionFilterOne(event) {
     if (_isEmojiGood(event.emoji)) return;
@@ -217,9 +229,7 @@ export default definePlugin({
   // cancel MESSAGE_REACTION_ADD_MANY event if all emojis wiped out
   interceptReactionMany(event) {
     if (!(['MESSAGE_REACTION_ADD_MANY'].indexOf(event.type) + 1)) return false;
-    event.reactions.push(
-      ...event.reactions.splice(0).filter(reaction => _isEmojiGood(reaction))
-    );
+    filterArray(event.reactions, reaction => _isEmojiGood(reaction.emoji));
     if (event.reactions.size) return false;
     return true;
   },
