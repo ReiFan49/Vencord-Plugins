@@ -20,7 +20,7 @@ const settings = definePluginSettings({
   emojiIDs: {
     type: OptionType.STRING,
     description: 'Emoji IDs to Filter',
-    default: '268029172880769025 268029172641693696 268049559169531904 268029174134865920',
+    default: '',
   },
 });
 
