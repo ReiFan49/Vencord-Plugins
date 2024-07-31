@@ -1,6 +1,9 @@
 name: Build Plugins
 on:
   workflow_dispatch:
+  repository_dispatch:
+    types:
+    - plugin-update
   push:
     branches:
     - 'master'
