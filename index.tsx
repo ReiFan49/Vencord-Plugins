@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Message } from "discord-types/general";
+import type { Message } from "discord-types/general";
 
 import { definePluginSettings } from "@api/Settings";
 import { Logger } from "@utils/Logger";
@@ -27,6 +27,14 @@ const settings = definePluginSettings({
 const filteredMessage = '-# This message has been filtered.';
 
 /* utility */
+
+interface FilterExtension {
+  _filterData?: {
+    original: string;
+    after: string;
+  };
+}
+type FilteredMessage = Message & FilterExtension;
 
 function emojiName(s : string) : string {
   return (s[0] === '~') ? reverseString(s.slice(1)) : s;
@@ -96,7 +104,7 @@ function _isEmojiGood(emoji) {
   return true;
 }
 
-function _redactEmojiFromContent(message: Message) {
+function _redactEmojiFromContent(message: FilteredMessage) {
   const toRemove : RegExp[] = [];
   // @ts-ignore
   const baseContent = ('_filterData' in message) ? message._filterData.after : message.content;
@@ -123,12 +131,12 @@ function _redactEmojiFromContent(message: Message) {
   }
 }
 
-function _redactEmojiFromReactions(message: Message) {
+function _redactEmojiFromReactions(message: FilteredMessage) {
   if (!message.reactions?.length) return;
   filterArray(message.reactions, reaction => _isEmojiGood(reaction.emoji));
 }
 
-function _redactEmojiFromMessageData(message: Message) {
+function _redactEmojiFromMessageData(message: FilteredMessage) {
   try {
     _redactEmojiFromContent(message);
     _redactEmojiFromReactions(message);
