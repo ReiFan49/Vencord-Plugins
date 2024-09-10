@@ -122,12 +122,12 @@ function _redactEmojiFromMessageData(message: FilteredMessage) {
 function interceptReactionOne(event: any) : boolean {
   if (_isEmojiGood(event.emoji)) return false;
   return true;
-};
+}
 function interceptReactionMany(event: any) : boolean {
   filterArray(event.reactions, reaction => _isEmojiGood(reaction.emoji));
   if (event.reactions.size) return false;
   return true;
-};
+}
 const fluxInterceptors = pluginInterceptors(
   defineInterceptor(interceptReactionOne, 'MESSAGE_REACTION_ADD'),
   defineInterceptor(interceptReactionMany, 'MESSAGE_REACTION_ADD_MANY'),
