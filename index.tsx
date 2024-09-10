@@ -7,9 +7,11 @@
 import type { Message } from "discord-types/general";
 
 import { definePluginSettings } from "@api/Settings";
-import { Logger } from "@utils/Logger";
-import definePlugin, { OptionType } from "@utils/types";
-import { Forms, FluxDispatcher } from "@webpack/common";
+import definePlugin, {
+  pluginInterceptors, defineInterceptor,
+  OptionType
+} from "@utils/types";
+import { Forms, FluxDispatcher, UtilTypes } from "@webpack/common";
 
 const settings = definePluginSettings({
   emojiNames: {
@@ -43,7 +45,7 @@ function reverseString(s : string) : string {
   return Array.from(String(s)).reverse().join('');
 }
 
-function subscribePriority(type, callback: (data: any) => void) {
+function subscribePriority(type, callback: UtilTypes.FluxCallbackAction) {
   const subs : Set<any> = FluxDispatcher._subscriptions[type];
   if (!subs)
     return FluxDispatcher.subscribe(type, callback);
@@ -52,35 +54,6 @@ function subscribePriority(type, callback: (data: any) => void) {
 
 function filterArray(array : any[], callback: (data: any) => boolean) {
   array.push(...array.splice(0).filter(callback));
-}
-
-function interceptor(types, callback: (event: any) => boolean) {
-  if (typeof types === 'string') types = types.split(/\s+/);
-
-  function wrap(event) {
-    if (!(types.indexOf(event.type) + 1)) return false;
-    return callback(event);
-  }
-
-  interceptor.map.push([callback, types, wrap]);
-  // @ts-ignore
-  FluxDispatcher.addInterceptor(wrap);
-}
-
-interceptor.map = [];
-
-function removeInterceptor(types, callback: (event: any) => boolean) {
-  if (typeof types === 'string') types = types.split(/\s+/);
-
-  const pairIndex = interceptor.map.findIndex(pair => pair[0] === callback);
-  if (typeof pairIndex !== 'number') return;
-
-  const [pairFun, pairTypes, wrap] = interceptor.map.splice(pairIndex, 1).pop().pop();
-  filterArray(pairTypes, type => !(types.indexOf(type) + 1));
-  // do not remove the interceptor if it's not empty yet
-  if (pairTypes.length > 0) return;
-  // @ts-ignore
-  FluxDispatcher._interceptors.splice(wrap, 1);
 }
 
 /* blacklist settings */
@@ -145,6 +118,21 @@ function _redactEmojiFromMessageData(message: FilteredMessage) {
   }
 }
 
+/* interceptors */
+function interceptReactionOne(event: any) : boolean {
+  if (_isEmojiGood(event.emoji)) return false;
+  return true;
+};
+function interceptReactionMany(event: any) : boolean {
+  filterArray(event.reactions, reaction => _isEmojiGood(reaction.emoji));
+  if (event.reactions.size) return false;
+  return true;
+};
+const fluxInterceptors = pluginInterceptors(
+  defineInterceptor(interceptReactionOne, 'MESSAGE_REACTION_ADD'),
+  defineInterceptor(interceptReactionMany, 'MESSAGE_REACTION_ADD_MANY'),
+);
+
 /* plugin */
 
 export default definePlugin({
@@ -182,24 +170,17 @@ export default definePlugin({
       }],
     })),
   ], */
+  fluxInterceptors,
 
   start() {
     FluxDispatcher.subscribe('MESSAGE_CREATE', this.onMessageFilterOne);
     FluxDispatcher.subscribe('MESSAGE_UPDATE', this.onMessageFilterOne);
     FluxDispatcher.subscribe('LOAD_MESSAGES_SUCCESS', this.onMessageFilterMany);
-
-    // subscribePriority('MESSAGE_REACTION_ADD', this.onReactionFilterOne);
-    interceptor(['MESSAGE_REACTION_ADD'], this.interceptReactionOne);
-    subscribePriority('MESSAGE_REACTION_ADD_MANY', this.onReactionFilterMany);
   },
   stop() {
     FluxDispatcher.unsubscribe('MESSAGE_CREATE', this.onMessageFilterOne);
     FluxDispatcher.unsubscribe('MESSAGE_UPDATE', this.onMessageFilterOne);
     FluxDispatcher.unsubscribe('LOAD_MESSAGES_SUCCESS', this.onMessageFilterMany);
-
-    // FluxDispatcher.unsubscribe('MESSAGE_REACTION_ADD', this.onReactionFilterOne);
-    removeInterceptor(['MESSAGE_REACTION_ADD'], this.interceptReactionOne);
-    FluxDispatcher.unsubscribe('MESSAGE_REACTION_ADD_MANY', this.onReactionFilterMany);
   },
 
   onMessageFilterOne(event) {
@@ -215,30 +196,5 @@ export default definePlugin({
     const newMessages = JSON.stringify(event.messages);
     if (oldMessages !== newMessages)
       FluxDispatcher.dispatch(event);
-  },
-  onReactionFilterOne(event) {
-    if (_isEmojiGood(event.emoji)) return;
-    Object.assign(event, {emoji: {id: null, name: '�'}});
-  },
-  onReactionFilterMany(event) {
-    filterArray(event.reactions, reaction => _isEmojiGood(reaction.emoji));
-  },
-  // cancel MESSAGE_REACTION_ADD event if blacklisted emoji
-  interceptReactionOne(event) {
-    if (!(['MESSAGE_REACTION_ADD'].indexOf(event.type) + 1)) return false;
-    try {
-      if (_isEmojiGood(event.emoji)) return false;
-    } catch (e) {
-      new Logger('FilterUnwantedEmoji').error('Unable to halt emoji reaction.', e);
-      return false;
-    }
-    return true;
-  },
-  // cancel MESSAGE_REACTION_ADD_MANY event if all emojis wiped out
-  interceptReactionMany(event) {
-    if (!(['MESSAGE_REACTION_ADD_MANY'].indexOf(event.type) + 1)) return false;
-    filterArray(event.reactions, reaction => _isEmojiGood(reaction.emoji));
-    if (event.reactions.size) return false;
-    return true;
   },
 });
