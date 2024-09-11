@@ -13,7 +13,7 @@ const log = new Logger('HideRecentActivity');
 
 function interceptContentInventoryLog(event: any) : boolean {
   if (event.type.indexOf('CONTENT_INVENTORY') === -1) return false;
-  // log.info(event.type, event);
+  log.info(event.type, event);
   return false;
 }
 function interceptContentInventory(event: any) : boolean {
@@ -21,6 +21,7 @@ function interceptContentInventory(event: any) : boolean {
 }
 const fluxInterceptors = pluginInterceptors(
   defineInterceptor(interceptContentInventory, 'CONTENT_INVENTORY_SET_FEED'),
+  // defineInterceptor(interceptContentInventoryLog, []),
 );
 
 /* plugin */
