@@ -12,7 +12,7 @@ import definePlugin, {
 const log = new Logger('HideRecentActivity');
 
 function interceptContentInventoryLog(event: any) : boolean {
-  if (event.type.indexOf('CONTENT_INVENTORY') == -1) return false;
+  if (event.type.indexOf('CONTENT_INVENTORY') === -1) return false;
   // log.info(event.type, event);
   return false;
 }
