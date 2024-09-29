@@ -7,6 +7,7 @@
 import type { Message } from "discord-types/general";
 
 import { definePluginSettings } from "@api/Settings";
+import { Logger } from "@utils/Logger";
 import definePlugin, {
   pluginInterceptors, defineInterceptor,
   OptionType
