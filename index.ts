@@ -404,6 +404,9 @@ function interceptMessageMentionStrip(event: any) : boolean {
   return false;
 }
 
+interceptMessageMentionShadow = wrapInterceptor(interceptMessageMentionShadow, ['EnsureNonDM', 'DirectPing']),
+interceptMessageMentionStrip = wrapInterceptor(interceptMessageMentionStrip, ['EnsureNonDM', 'ReplyPing']);
+
 function interceptMessageBatch(event: any) : boolean {
   const channelId = event.channelId;
   const channel = ChannelStore.getChannel(channelId);
@@ -446,9 +449,9 @@ function interceptMessageBatch(event: any) : boolean {
 const fluxInterceptors = pluginInterceptors(
   defineInterceptor(interceptMessageBatch, 'LOAD_MESSAGES_SUCCESS'),
   defineInterceptor(wrapInterceptor(interceptMessageMentionLog, ['EnsureNonDM', 'NormalPing']), 'MESSAGE_CREATE'),
-  defineInterceptor(wrapInterceptor(interceptMessageMentionShadow, ['EnsureNonDM', 'DirectPing']), 'MESSAGE_CREATE'),
-  defineInterceptor(wrapInterceptor(interceptMessageMentionRead, ['EnsureNonDM', 'DirectPing']), 'MESSAGE_CREATE'),
-  defineInterceptor(wrapInterceptor(interceptMessageMentionStrip, ['EnsureNonDM', 'DirectPing']), 'MESSAGE_CREATE'),
+  defineInterceptor(interceptMessageMentionShadow, 'MESSAGE_CREATE'),
+  defineInterceptor(wrapInterceptor(interceptMessageMentionRead, ['EnsureNonDM', 'ReplyPing']), 'MESSAGE_CREATE'),
+  defineInterceptor(interceptMessageMentionStrip, 'MESSAGE_CREATE'),
 );
 
 /* plugin */
